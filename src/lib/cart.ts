@@ -26,7 +26,7 @@ type RawItem = {
     slug: string;
     seller_id: string;
     base_price: number;
-    product_images: { url: string; sort_order: number }[];
+    product_images: { url: string; sort_order: number; option_value_id: string | null }[];
   } | null;
 };
 type RawValue = {
@@ -43,7 +43,7 @@ export async function loadCart(supabase: SupabaseClient, userId: string): Promis
   const { data } = await supabase
     .from("cart_items")
     .select(
-      "id, quantity, option_value_ids, addon_ids, product:products(id, title, slug, seller_id, base_price, product_images(url, sort_order))"
+      "id, quantity, option_value_ids, addon_ids, product:products(id, title, slug, seller_id, base_price, product_images(url, sort_order, option_value_id))"
     )
     .eq("user_id", userId)
     .order("created_at");
@@ -78,7 +78,11 @@ export async function loadCart(supabase: SupabaseClient, userId: string): Promis
     const subtotal = Number(p.base_price) + chosen.reduce((n, v) => n + Number(v.price_delta), 0);
     const colour = chosen.find((v) => v.option_groups.kind === "swatch");
     const baseName = p.title.split(" – ")[0];
-    const image = [...(p.product_images ?? [])].sort((a, b) => a.sort_order - b.sort_order)[0];
+    const sortedImgs = [...(p.product_images ?? [])].sort((a, b) => a.sort_order - b.sort_order);
+    const image =
+      sortedImgs.find((img) => colour && img.option_value_id === colour.id) ??
+      sortedImgs.find((img) => !img.option_value_id) ??
+      sortedImgs[0];
     return {
       id: i.id,
       quantity: i.quantity,

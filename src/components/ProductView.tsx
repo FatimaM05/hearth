@@ -108,14 +108,18 @@ export default function ProductView({ product, sellerName }: { product: ProductF
   const hex = colour?.swatch_hex ?? "#E8DEC6";
 
   // ----- gallery -----
+  const sortedImages = useMemo(
+    () => [...product.product_images].sort((a, b) => a.sort_order - b.sort_order),
+    [product.product_images]
+  );
+
   const slides: Slide[] = useMemo(() => {
-    const imgs = [...product.product_images].sort((a, b) => a.sort_order - b.sort_order);
-    const forColour = imgs.filter((i) => i.option_value_id && i.option_value_id === colourId);
-    const general = imgs.filter((i) => !i.option_value_id);
+    const forColour = sortedImages.filter((i) => i.option_value_id && i.option_value_id === colourId);
+    const general = sortedImages.filter((i) => !i.option_value_id);
     const chosen = [...forColour, ...general];
     if (chosen.length === 0) return [0, 1, 2, 3, 4].map((variant) => ({ kind: "art" as const, variant }));
     return chosen.map((i) => ({ kind: "img" as const, url: i.url, alt: i.alt ?? product.title }));
-  }, [product.product_images, product.title, colourId]);
+  }, [sortedImages, product.title, colourId]);
   const cur = Math.min(slide, slides.length - 1);
 
   function goTo(i: number) {
@@ -381,6 +385,7 @@ export default function ProductView({ product, sellerName }: { product: ProductF
                       <div role="radiogroup" aria-label={g.name} className="grid grid-cols-2 gap-2.5 min-[420px]:grid-cols-3 sm:grid-cols-4">
                         {g.option_values.map((v) => {
                           const on = sel[g.id] === v.id;
+                          const swatchImg = sortedImages.find((img) => img.option_value_id === v.id);
                           return (
                             <button
                               key={v.id}
@@ -397,11 +402,21 @@ export default function ProductView({ product, sellerName }: { product: ProductF
                               }`}
                             >
                               <div className="relative aspect-[4/3] w-full overflow-hidden rounded-lg bg-mist">
-                                <BedArt
-                                  color={v.swatch_hex ?? "#E8DEC6"}
-                                  variant={1}
-                                  className="h-full w-full transition-transform duration-300 group-hover:scale-105"
-                                />
+                                {swatchImg ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
+                                    src={swatchImg.url}
+                                    alt={swatchImg.alt ?? v.label}
+                                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                                    draggable={false}
+                                  />
+                                ) : (
+                                  <BedArt
+                                    color={v.swatch_hex ?? "#E8DEC6"}
+                                    variant={1}
+                                    className="h-full w-full transition-transform duration-300 group-hover:scale-105"
+                                  />
+                                )}
                                 <span
                                   className="absolute bottom-1.5 left-1.5 size-4 rounded-full border border-white/90 shadow-xs"
                                   style={{ background: v.swatch_hex ?? "#ccc" }}

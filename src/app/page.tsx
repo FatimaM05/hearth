@@ -78,6 +78,11 @@ async function HomeContent({ searchParams }: { searchParams: Promise<SP> }) {
     const subtotal = optionSubtotal(p.base_price, groups, sel);
     const swatches = groups.find((g) => g.kind === "swatch")?.option_values ?? [];
     const defaultColour = swatches.find((v) => v.id === sel[groups.find((g) => g.kind === "swatch")?.id ?? ""]);
+    const sortedImgs = [...p.product_images].sort((a, b) => a.sort_order - b.sort_order);
+    const cardImg =
+      sortedImgs.find((i) => defaultColour && i.option_value_id === defaultColour.id) ??
+      sortedImgs.find((i) => !i.option_value_id) ??
+      sortedImgs[0];
     const sizeVals = groups.filter((g) => isSize(g.name)).flatMap((g) => g.option_values.map((v) => v.label));
     return {
       p,
@@ -86,6 +91,7 @@ async function HomeContent({ searchParams }: { searchParams: Promise<SP> }) {
       pct: discountPct(Number(p.base_price), p.compare_at_price),
       swatches: [...swatches].sort((a, b) => a.sort_order - b.sort_order),
       hex: defaultColour?.swatch_hex ?? "#E8DEC6",
+      cardImg,
       colourLabels: swatches.map((v) => v.label),
       sizeLabels: sizeVals,
     };
@@ -397,7 +403,7 @@ async function HomeContent({ searchParams }: { searchParams: Promise<SP> }) {
         ) : (
           <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {list.map((r) => {
-              const img = [...r.p.product_images].sort((a, b) => a.sort_order - b.sort_order)[0];
+              const img = r.cardImg;
               return (
                 <li key={r.p.id}>
                   <Link

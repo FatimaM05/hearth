@@ -198,7 +198,7 @@ export default function SellerProductForm({
     setAddons(PRAGUE_PRESET.addons);
   }
 
-  async function onUploadFiles(files: FileList | null) {
+  async function onUploadFiles(files: FileList | null, targetColourLabel = "") {
     if (!files?.length) return;
     setError(null);
     setUploading(true);
@@ -211,7 +211,11 @@ export default function SellerProductForm({
         const { error: upErr } = await supabase.storage.from("product-images").upload(path, file);
         if (upErr) throw upErr;
         const { data } = supabase.storage.from("product-images").getPublicUrl(path);
-        uploaded.push({ url: data.publicUrl, alt: title || file.name, colourLabel: "" });
+        uploaded.push({
+          url: data.publicUrl,
+          alt: targetColourLabel ? `${title || "Bed"} – ${targetColourLabel}` : title || file.name,
+          colourLabel: targetColourLabel,
+        });
       }
       setImages((prev) => [...prev, ...uploaded]);
     } catch (e) {
@@ -479,110 +483,171 @@ export default function SellerProductForm({
               </div>
 
               <div className="space-y-2">
-                {grp.values.map((val, vi) => (
-                  <div key={vi} className="flex flex-wrap items-center gap-2 rounded-xl bg-white p-2.5 ring-1 ring-fog/80">
-                    {grp.kind === "swatch" && (
+                {grp.values.map((val, vi) => {
+                  const trimmedLabel = val.label.trim();
+                  const colourImgs =
+                    grp.kind === "swatch" && trimmedLabel
+                      ? images.filter((img) => img.colourLabel.trim().toLowerCase() === trimmedLabel.toLowerCase())
+                      : [];
+                  const primaryColourImg = colourImgs[0];
+
+                  return (
+                    <div key={vi} className="flex flex-wrap items-center gap-2 rounded-xl bg-white p-2.5 ring-1 ring-fog/80">
+                      {grp.kind === "swatch" && (
+                        <>
+                          <input
+                            type="color"
+                            aria-label="Swatch colour"
+                            value={val.swatchHex || "#E8DEC6"}
+                            onChange={(e) =>
+                              setGroups((prev) =>
+                                prev.map((g, idx) =>
+                                  idx === gi
+                                    ? {
+                                        ...g,
+                                        values: g.values.map((v, vIdx) =>
+                                          vIdx === vi ? { ...v, swatchHex: e.target.value } : v
+                                        ),
+                                      }
+                                    : g
+                                )
+                              )
+                            }
+                            className="size-10 shrink-0 cursor-pointer rounded-lg border border-fog bg-white p-0.5"
+                          />
+                          {primaryColourImg ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={primaryColourImg.url}
+                              alt={trimmedLabel}
+                              className="size-10 shrink-0 rounded-lg object-cover ring-1 ring-fog"
+                            />
+                          ) : (
+                            <span
+                              aria-hidden="true"
+                              className="grid size-10 shrink-0 place-items-center rounded-lg border border-dashed border-fog text-[10px] text-muted"
+                            >
+                              Img
+                            </span>
+                          )}
+                        </>
+                      )}
                       <input
-                        type="color"
-                        aria-label="Swatch colour"
-                        value={val.swatchHex || "#E8DEC6"}
-                        onChange={(e) =>
+                        value={val.label}
+                        onChange={(e) => {
+                          const oldLabel = val.label.trim().toLowerCase();
+                          const nextLabel = e.target.value;
                           setGroups((prev) =>
                             prev.map((g, idx) =>
                               idx === gi
                                 ? {
                                     ...g,
                                     values: g.values.map((v, vIdx) =>
-                                      vIdx === vi ? { ...v, swatchHex: e.target.value } : v
+                                      vIdx === vi ? { ...v, label: nextLabel } : v
                                     ),
                                   }
                                 : g
                             )
-                          )
-                        }
-                        className="size-10 shrink-0 cursor-pointer rounded-lg border border-fog bg-white p-0.5"
+                          );
+                          if (grp.kind === "swatch" && oldLabel) {
+                            setImages((prev) =>
+                              prev.map((img) =>
+                                img.colourLabel.trim().toLowerCase() === oldLabel
+                                  ? { ...img, colourLabel: nextLabel.trim() }
+                                  : img
+                              )
+                            );
+                          }
+                        }}
+                        placeholder={grp.kind === "swatch" ? "e.g. Cream Naples" : "e.g. King 5FT"}
+                        className="h-10 min-w-[150px] flex-1 rounded-lg border border-fog px-3 text-sm"
                       />
-                    )}
-                    <input
-                      value={val.label}
-                      onChange={(e) =>
-                        setGroups((prev) =>
-                          prev.map((g, idx) =>
-                            idx === gi
-                              ? {
-                                  ...g,
-                                  values: g.values.map((v, vIdx) =>
-                                    vIdx === vi ? { ...v, label: e.target.value } : v
-                                  ),
-                                }
-                              : g
-                          )
-                        )
-                      }
-                      placeholder={grp.kind === "swatch" ? "e.g. Cream Naples" : "e.g. King 5FT"}
-                      className="h-10 min-w-[160px] flex-1 rounded-lg border border-fog px-3 text-sm"
-                    />
-                    <label className="flex items-center gap-1.5 text-xs text-muted">
-                      +£
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={val.priceDelta}
-                        onChange={(e) =>
-                          setGroups((prev) =>
-                            prev.map((g, idx) =>
-                              idx === gi
-                                ? {
-                                    ...g,
-                                    values: g.values.map((v, vIdx) =>
-                                      vIdx === vi ? { ...v, priceDelta: Number(e.target.value) } : v
-                                    ),
-                                  }
-                                : g
+                      {grp.kind === "swatch" && (
+                        <label
+                          title={trimmedLabel ? `Upload real bed photo for ${trimmedLabel}` : "Enter colour name first"}
+                          className={`inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition ${
+                            trimmedLabel
+                              ? "cursor-pointer bg-mist text-ink ring-1 ring-fog hover:ring-ink"
+                              : "cursor-not-allowed bg-mist/50 text-muted opacity-60"
+                          }`}
+                        >
+                          {uploading
+                            ? "Uploading..."
+                            : colourImgs.length > 0
+                              ? `+ Photo (${colourImgs.length})`
+                              : "Upload photo"}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            disabled={uploading || !trimmedLabel}
+                            onChange={(e) => onUploadFiles(e.target.files, trimmedLabel)}
+                            className="sr-only"
+                          />
+                        </label>
+                      )}
+                      <label className="flex items-center gap-1.5 text-xs text-muted">
+                        +£
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={val.priceDelta}
+                          onChange={(e) =>
+                            setGroups((prev) =>
+                              prev.map((g, idx) =>
+                                idx === gi
+                                  ? {
+                                      ...g,
+                                      values: g.values.map((v, vIdx) =>
+                                        vIdx === vi ? { ...v, priceDelta: Number(e.target.value) } : v
+                                      ),
+                                    }
+                                  : g
+                              )
                             )
-                          )
-                        }
-                        className="h-10 w-24 rounded-lg border border-fog px-2.5 text-sm text-obsidian"
-                      />
-                    </label>
-                    <label className="flex cursor-pointer items-center gap-1.5 px-2 text-xs font-medium">
-                      <input
-                        type="radio"
-                        name={`default-${gi}`}
-                        checked={val.isDefault}
-                        onChange={() =>
-                          setGroups((prev) =>
-                            prev.map((g, idx) =>
-                              idx === gi
-                                ? {
-                                    ...g,
-                                    values: g.values.map((v, vIdx) => ({ ...v, isDefault: vIdx === vi })),
-                                  }
-                                : g
+                          }
+                          className="h-10 w-24 rounded-lg border border-fog px-2.5 text-sm text-obsidian"
+                        />
+                      </label>
+                      <label className="flex cursor-pointer items-center gap-1.5 px-2 text-xs font-medium">
+                        <input
+                          type="radio"
+                          name={`default-${gi}`}
+                          checked={val.isDefault}
+                          onChange={() =>
+                            setGroups((prev) =>
+                              prev.map((g, idx) =>
+                                idx === gi
+                                  ? {
+                                      ...g,
+                                      values: g.values.map((v, vIdx) => ({ ...v, isDefault: vIdx === vi })),
+                                    }
+                                  : g
+                              )
                             )
-                          )
-                        }
-                        className="size-4 cursor-pointer accent-ink"
-                      />
-                      Default
-                    </label>
-                    {grp.values.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setGroups((prev) =>
-                            prev.map((g, idx) =>
-                              idx === gi ? { ...g, values: g.values.filter((_, vIdx) => vIdx !== vi) } : g
+                          }
+                          className="size-4 cursor-pointer accent-ink"
+                        />
+                        Default
+                      </label>
+                      {grp.values.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setGroups((prev) =>
+                              prev.map((g, idx) =>
+                                idx === gi ? { ...g, values: g.values.filter((_, vIdx) => vIdx !== vi) } : g
+                              )
                             )
-                          )
-                        }
-                        className="min-h-9 cursor-pointer rounded-lg px-2.5 text-xs font-semibold text-red-700 hover:bg-red-50"
-                      >
-                        Remove
-                      </button>
-                    )}
-                  </div>
-                ))}
+                          }
+                          className="min-h-9 cursor-pointer rounded-lg px-2.5 text-xs font-semibold text-red-700 hover:bg-red-50"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
               <button
