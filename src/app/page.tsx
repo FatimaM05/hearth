@@ -1,69 +1,201 @@
-import Image from "next/image";
+import { Suspense } from "react";
+import Link from "next/link";
+import { connection } from "next/server";
+import BedArt from "@/components/BedArt";
+import { createClient } from "@/lib/supabase/server";
+import { comparePrice, defaultSelection, discountPct, gbp, optionSubtotal } from "@/lib/pricing";
+import type { Category, ProductFull } from "@/lib/types";
 
-export default function Home() {
+type SP = { q?: string; category?: string; colour?: string; size?: string; min?: string; max?: string };
+
+const isSize = (name: string) => name.trim().toLowerCase() === "size";
+
+export default function Home({ searchParams }: { searchParams: Promise<SP> }) {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+    <div>
+      <h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl md:text-4xl">Beds built around you</h1>
+      <Suspense fallback={<p className="mt-1 text-muted">Loading beds...</p>}>
+        <Catalogue searchParams={searchParams} />
+      </Suspense>
     </div>
+  );
+}
+
+async function Catalogue({ searchParams }: { searchParams: Promise<SP> }) {
+  await connection();
+  const sp = await searchParams;
+  const supabase = await createClient();
+
+  const [{ data: prods }, { data: cats }] = await Promise.all([
+    supabase
+      .from("products")
+      .select("*, option_groups(*, option_values(*)), product_addons(*), product_images(*), categories(name, slug)")
+      .eq("status", "active")
+      .eq("admin_hidden", false)
+      .order("created_at", { ascending: false }),
+    supabase.from("categories").select("*").not("parent_id", "is", null).order("name"),
+  ]);
+  const all = (prods ?? []) as unknown as ProductFull[];
+  const categories = (cats ?? []) as Category[];
+
+  const rows = all.map((p) => {
+    const groups = [...p.option_groups].sort((a, b) => a.sort_order - b.sort_order);
+    const sel = defaultSelection(groups);
+    const subtotal = optionSubtotal(p.base_price, groups, sel);
+    const swatches = groups.find((g) => g.kind === "swatch")?.option_values ?? [];
+    const defaultColour = swatches.find((v) => v.id === sel[groups.find((g) => g.kind === "swatch")?.id ?? ""]);
+    return {
+      p,
+      price: subtotal,
+      was: comparePrice(subtotal, 0, Number(p.base_price), p.compare_at_price),
+      pct: discountPct(Number(p.base_price), p.compare_at_price),
+      swatches: [...swatches].sort((a, b) => a.sort_order - b.sort_order),
+      hex: defaultColour?.swatch_hex ?? "#E8DEC6",
+      colourLabels: swatches.map((v) => v.label),
+      sizeLabels: groups.filter((g) => isSize(g.name)).flatMap((g) => g.option_values.map((v) => v.label)),
+    };
+  });
+
+  const colours = [...new Set(rows.flatMap((r) => r.colourLabels))].sort();
+  const sizes = [...new Set(rows.flatMap((r) => r.sizeLabels))];
+
+  const q = sp.q?.trim().toLowerCase();
+  const min = sp.min ? Number(sp.min) : null;
+  const max = sp.max ? Number(sp.max) : null;
+  const list = rows.filter(
+    (r) =>
+      (!q || r.p.title.toLowerCase().includes(q) || (r.p.description ?? "").toLowerCase().includes(q)) &&
+      (!sp.category || r.p.categories?.slug === sp.category) &&
+      (!sp.colour || r.colourLabels.includes(sp.colour)) &&
+      (!sp.size || r.sizeLabels.includes(sp.size)) &&
+      (min === null || r.price >= min) &&
+      (max === null || r.price <= max)
+  );
+
+  const field = "h-11 w-full rounded-xl border border-fog bg-white px-3 text-sm";
+  const selectField = `${field} cursor-pointer`;
+  const filtered = Boolean(q || sp.category || sp.colour || sp.size || sp.min || sp.max);
+
+  return (
+    <>
+      <p className="mt-1 text-muted">
+        {list.length} {list.length === 1 ? "product" : "products"}
+        {filtered && " match your filters"}
+      </p>
+
+      <form
+        method="get"
+        className="mt-5 grid grid-cols-2 gap-3 rounded-2xl bg-white p-4 ring-1 ring-fog md:grid-cols-3 lg:grid-cols-6"
+      >
+        <label className="col-span-2 grid gap-1 text-xs text-muted md:col-span-1">
+          Search
+          <input name="q" defaultValue={sp.q ?? ""} placeholder="Name or keyword" className={field} />
+        </label>
+        <label className="grid gap-1 text-xs text-muted">
+          Category
+          <select name="category" defaultValue={sp.category ?? ""} className={selectField}>
+            <option value="">All</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.slug}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="grid gap-1 text-xs text-muted">
+          Colour
+          <select name="colour" defaultValue={sp.colour ?? ""} className={selectField}>
+            <option value="">Any</option>
+            {colours.map((c) => (
+              <option key={c}>{c}</option>
+            ))}
+          </select>
+        </label>
+        <label className="col-span-2 grid gap-1 text-xs text-muted md:col-span-1">
+          Size
+          <select name="size" defaultValue={sp.size ?? ""} className={selectField}>
+            <option value="">Any</option>
+            {sizes.map((s) => (
+              <option key={s}>{s}</option>
+            ))}
+          </select>
+        </label>
+        <label className="grid gap-1 text-xs text-muted">
+          Min price (£)
+          <input name="min" type="number" min="0" inputMode="numeric" defaultValue={sp.min ?? ""} className={field} />
+        </label>
+        <label className="grid gap-1 text-xs text-muted">
+          Max price (£)
+          <input name="max" type="number" min="0" inputMode="numeric" defaultValue={sp.max ?? ""} className={field} />
+        </label>
+        <div className="col-span-full flex flex-wrap gap-2">
+          <button className="min-h-11 cursor-pointer rounded-xl bg-ink px-5 text-sm font-semibold text-mist">
+            Apply filters
+          </button>
+          {filtered && (
+            <Link
+              href="/"
+              className="inline-flex min-h-11 cursor-pointer items-center rounded-xl px-4 text-sm font-semibold underline"
+            >
+              Clear filters
+            </Link>
+          )}
+        </div>
+      </form>
+
+      {list.length === 0 ? (
+        <div className="mt-8 rounded-2xl bg-white p-8 text-center ring-1 ring-fog">
+          <p className="font-semibold">No products match those filters.</p>
+          <Link href="/" className="mt-2 inline-block cursor-pointer underline">
+            Show all products
+          </Link>
+        </div>
+      ) : (
+        <ul className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {list.map((r) => {
+            const img = [...r.p.product_images].sort((a, b) => a.sort_order - b.sort_order)[0];
+            return (
+              <li key={r.p.id}>
+                <Link
+                  href={`/products/${r.p.slug}`}
+                  className="block cursor-pointer overflow-hidden rounded-2xl bg-white ring-1 ring-fog transition-shadow hover:shadow-lg"
+                >
+                  <div className="relative aspect-[4/3]">
+                    {img ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={img.url} alt={r.p.title} className="h-full w-full object-cover" />
+                    ) : (
+                      <BedArt color={r.hex} className="h-full w-full" />
+                    )}
+                    {r.pct > 0 && (
+                      <span className="absolute left-3 top-3 rounded-lg bg-ink px-2.5 py-1 text-sm font-bold text-glow">
+                        {r.pct}% OFF
+                      </span>
+                    )}
+                  </div>
+                  <div className="p-4">
+                    <h2 className="font-display text-lg font-semibold leading-snug">{r.p.title}</h2>
+                    <p className="mt-1 flex items-baseline gap-2">
+                      <span className="text-xl font-bold">{gbp(r.price)}</span>
+                      {r.was && <s className="text-sm text-muted">{gbp(r.was)}</s>}
+                    </p>
+                    <div className="mt-3 flex items-center gap-1.5" aria-label={`${r.swatches.length} colours`}>
+                      {r.swatches.slice(0, 8).map((v) => (
+                        <span
+                          key={v.id}
+                          title={v.label}
+                          className="size-4 rounded-full border border-black/10"
+                          style={{ background: v.swatch_hex ?? "#ccc" }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </>
   );
 }
