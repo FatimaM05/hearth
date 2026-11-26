@@ -8,7 +8,9 @@ import { addToCart } from "@/app/actions/cart";
 import { comparePrice, defaultSelection, discountPct, gbp, optionSubtotal, sum, unitPrice } from "@/lib/pricing";
 import type { OptionGroup, ProductFull } from "@/lib/types";
 
-type Slide = { kind: "img"; url: string; alt: string } | { kind: "art"; variant: number };
+type Slide =
+  | { kind: "img"; url: string; alt: string; cropClass?: string; label?: string }
+  | { kind: "art"; variant: number; label?: string };
 type Msg = { type: "ok" | "error"; text: string; login?: boolean } | null;
 
 function GroupIcon({ name, kind }: { name: string; kind: string }) {
@@ -81,7 +83,16 @@ export default function ProductView({ product, sellerName }: { product: ProductF
     [product.product_addons]
   );
 
-  const [sel, setSel] = useState<Record<string, string>>(() => defaultSelection(groups));
+  const [rawSel, setSel] = useState<Record<string, string>>(() => defaultSelection(groups));
+  const sel = useMemo(() => {
+    const defaults = defaultSelection(groups);
+    const out: Record<string, string> = {};
+    for (const g of groups) {
+      const curId = rawSel[g.id];
+      out[g.id] = curId && g.option_values.some((v) => v.id === curId) ? curId : defaults[g.id];
+    }
+    return out;
+  }, [groups, rawSel]);
   const [activeTab, setActiveTab] = useState(0);
   const [addonIds, setAddonIds] = useState<string[]>([]);
   const [qty, setQty] = useState(1);
@@ -118,8 +129,47 @@ export default function ProductView({ product, sellerName }: { product: ProductF
     const general = sortedImages.filter((i) => !i.option_value_id);
     const chosen = [...forColour, ...general];
     if (chosen.length === 0) return [0, 1, 2, 3, 4].map((variant) => ({ kind: "art" as const, variant }));
-    return chosen.map((i) => ({ kind: "img" as const, url: i.url, alt: i.alt ?? product.title }));
-  }, [sortedImages, product.title, colourId]);
+
+    const out: Slide[] = chosen.map((i) => ({ kind: "img" as const, url: i.url, alt: i.alt ?? product.title }));
+    if (out.length < 5 && out[0].kind === "img") {
+      const primary = out[0];
+      const details: Slide[] = [
+        {
+          kind: "img",
+          url: primary.url,
+          alt: `${title} – Drawer & base close-up`,
+          cropClass: "scale-[1.75] origin-[30%_84%]",
+          label: "Drawer & Base",
+        },
+        {
+          kind: "img",
+          url: primary.url,
+          alt: `${title} – Headboard channel close-up`,
+          cropClass: "scale-[1.8] origin-[32%_18%]",
+          label: "Headboard Detail",
+        },
+        {
+          kind: "img",
+          url: primary.url,
+          alt: `${title} – Upholstery & fabric finish`,
+          cropClass: "scale-[1.85] origin-[68%_72%]",
+          label: "Fabric & Finish",
+        },
+        {
+          kind: "img",
+          url: primary.url,
+          alt: `${title} – Mattress & cushion close-up`,
+          cropClass: "scale-[1.65] origin-[52%_44%]",
+          label: "Mattress Detail",
+        },
+      ];
+      for (const d of details) {
+        if (out.length >= 5) break;
+        out.push(d);
+      }
+    }
+    return out;
+  }, [sortedImages, product.title, colourId, title]);
   const cur = Math.min(slide, slides.length - 1);
 
   function goTo(i: number) {
@@ -143,10 +193,22 @@ export default function ProductView({ product, sellerName }: { product: ProductF
     return () => window.removeEventListener("keydown", onKey);
   }, [zoom, slides.length]);
 
-  const renderSlide = (s: Slide) =>
+  const renderSlide = (s: Slide, showBadge = false) =>
     s.kind === "img" ? (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img src={s.url} alt={s.alt} className="h-full w-full object-cover" draggable={false} />
+      <div className="relative h-full w-full overflow-hidden">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={s.url}
+          alt={s.alt}
+          className={`h-full w-full object-cover ${s.cropClass ?? ""}`}
+          draggable={false}
+        />
+        {showBadge && s.label && (
+          <span className="pointer-events-none absolute right-3 top-3 rounded-lg bg-white/90 px-2.5 py-1 text-xs font-semibold text-ink shadow-xs backdrop-blur-xs">
+            {s.label}
+          </span>
+        )}
+      </div>
     ) : (
       <BedArt color={hex} variant={s.variant} className="h-full w-full" />
     );
@@ -210,7 +272,7 @@ export default function ProductView({ product, sellerName }: { product: ProductF
                   aria-label={`Enlarge image ${i + 1} of ${slides.length}`}
                   className="aspect-[4/3] w-full shrink-0 cursor-zoom-in snap-center"
                 >
-                  {renderSlide(s)}
+                  {renderSlide(s, true)}
                 </button>
               ))}
             </div>
@@ -234,37 +296,41 @@ export default function ProductView({ product, sellerName }: { product: ProductF
                 </svg>
                 Click To Expand
               </button>
-              <div className="pointer-events-auto flex items-center gap-1.5 rounded-full bg-white/85 px-2.5 py-1 backdrop-blur-sm">
-                {slides.map((_, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    aria-label={`Go to image ${i + 1}`}
-                    onClick={() => goTo(i)}
-                    className={`h-2 cursor-pointer rounded-full transition-all duration-300 ${
-                      i === cur ? "w-5 bg-ink" : "w-2 bg-fog hover:bg-muted"
-                    }`}
-                  />
-                ))}
-              </div>
+              {slides.length > 1 && (
+                <div className="pointer-events-auto flex items-center gap-1.5 rounded-full bg-white/85 px-2.5 py-1 backdrop-blur-sm">
+                  {slides.map((_, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      aria-label={`Go to image ${i + 1}`}
+                      onClick={() => goTo(i)}
+                      className={`h-2 cursor-pointer rounded-full transition-all duration-300 ${
+                        i === cur ? "w-5 bg-ink" : "w-2 bg-fog hover:bg-muted"
+                      }`}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
           {/* Thumbnail strip with prev/next slide controls */}
           <div className="mt-3 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => goTo(cur - 1)}
-              disabled={cur === 0}
-              aria-label="Previous image"
-              className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-full border border-fog bg-white text-ink shadow-xs transition hover:border-ink disabled:cursor-not-allowed disabled:opacity-35"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="size-4" aria-hidden="true">
-                <path d="m15 18-6-6 6-6" />
-              </svg>
-            </button>
+            {slides.length > 1 && (
+              <button
+                type="button"
+                onClick={() => goTo(cur - 1)}
+                disabled={cur === 0}
+                aria-label="Previous image"
+                className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-full border border-fog bg-white text-ink shadow-xs transition hover:border-ink disabled:cursor-not-allowed disabled:opacity-35"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="size-4" aria-hidden="true">
+                  <path d="m15 18-6-6 6-6" />
+                </svg>
+              </button>
+            )}
 
-            <div className="flex flex-1 gap-2 overflow-x-auto py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="flex min-w-0 gap-2 overflow-x-auto px-1 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {slides.map((s, i) => (
                 <button
                   key={i}
@@ -281,17 +347,19 @@ export default function ProductView({ product, sellerName }: { product: ProductF
               ))}
             </div>
 
-            <button
-              type="button"
-              onClick={() => goTo(cur + 1)}
-              disabled={cur === slides.length - 1}
-              aria-label="Next image"
-              className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-full border border-fog bg-white text-ink shadow-xs transition hover:border-ink disabled:cursor-not-allowed disabled:opacity-35"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="size-4" aria-hidden="true">
-                <path d="m9 18 6-6-6-6" />
-              </svg>
-            </button>
+            {slides.length > 1 && (
+              <button
+                type="button"
+                onClick={() => goTo(cur + 1)}
+                disabled={cur === slides.length - 1}
+                aria-label="Next image"
+                className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-full border border-fog bg-white text-ink shadow-xs transition hover:border-ink disabled:cursor-not-allowed disabled:opacity-35"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="size-4" aria-hidden="true">
+                  <path d="m9 18 6-6-6-6" />
+                </svg>
+              </button>
+            )}
           </div>
         </section>
 
