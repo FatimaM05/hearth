@@ -138,6 +138,15 @@ create table public.order_items (
   updated_at timestamptz not null default now()
 );
 
+-- Table privileges for PostgREST roles (RLS still enforces row-level access)
+grant usage on schema public to anon, authenticated;
+grant select on public.profiles, public.categories, public.products, public.option_groups,
+  public.option_values, public.product_addons, public.product_images to anon, authenticated;
+grant insert, update, delete on public.categories, public.option_groups, public.option_values,
+  public.product_addons, public.product_images, public.cart_items to authenticated;
+grant insert, delete on public.products to authenticated;
+grant select, insert on public.orders, public.order_items to authenticated;
+
 -- Only these columns may be edited by normal users (admin-only fields stay locked)
 revoke update on public.profiles from authenticated;
 grant update (full_name, shop_name) on public.profiles to authenticated;
