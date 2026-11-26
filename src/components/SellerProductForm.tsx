@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient as createBrowserClient } from "@/lib/supabase/client";
+import { describeProductPhoto } from "@/app/actions/ai";
 import {
   saveProduct,
   type SellerAddonInput,
@@ -125,6 +126,8 @@ export default function SellerProductForm({
   const router = useRouter();
   const [pending, start] = useTransition();
   const [uploading, setUploading] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiNote, setAiNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [title, setTitle] = useState(product?.title ?? "");
@@ -225,6 +228,34 @@ export default function SellerProductForm({
     }
   }
 
+  async function onDescribePhoto(url: string) {
+    setError(null);
+    setAiNote(null);
+    setAiLoading(true);
+    try {
+      const res = await describeProductPhoto(url);
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      setTitle(res.title);
+      if (!slug.trim()) {
+        setSlug(
+          res.title
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "")
+        );
+      }
+      setDescription(res.description);
+      setAiNote(
+        `AI filled title & description${res.colourName ? ` (detected colour: ${res.colourName})` : ""}. Review before publishing.`
+      );
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
   function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -274,6 +305,12 @@ export default function SellerProductForm({
           </button>
         )}
       </div>
+
+      {error && (
+        <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700 ring-1 ring-red-200">
+          {error}
+        </p>
+      )}
 
       {/* Core details */}
       <section className="grid gap-4 rounded-2xl bg-white/95 p-5 shadow-xs ring-1 ring-fog sm:grid-cols-2 sm:p-6">
@@ -352,7 +389,19 @@ export default function SellerProductForm({
         </label>
 
         <label className="grid gap-1 text-sm font-medium sm:col-span-2">
-          Description
+          <span className="flex flex-wrap items-center justify-between gap-2">
+            <span>Description</span>
+            {images[0]?.url && (
+              <button
+                type="button"
+                disabled={aiLoading}
+                onClick={() => onDescribePhoto(images[0].url)}
+                className="inline-flex min-h-8 cursor-pointer items-center gap-1 rounded-lg bg-glow/40 px-3 text-xs font-bold text-obsidian transition hover:bg-glow disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {aiLoading ? "Analysing photo..." : "✨ Auto-fill title & description from photo"}
+              </button>
+            )}
+          </span>
           <textarea
             rows={3}
             value={description}
@@ -360,6 +409,7 @@ export default function SellerProductForm({
             placeholder="Describe the headboard, divan base, fabric feel, and options..."
             className="w-full rounded-xl border border-fog bg-white p-3 text-sm text-obsidian transition focus:border-ink"
           />
+          {aiNote && <span className="text-xs font-medium text-ink">{aiNote}</span>}
         </label>
       </section>
 
@@ -372,17 +422,29 @@ export default function SellerProductForm({
               Upload photos (stored in Supabase Storage) or leave empty to use the colour-tinted bed gallery.
             </p>
           </div>
-          <label className="inline-flex min-h-11 cursor-pointer items-center rounded-xl bg-ink px-4 text-xs font-semibold text-mist transition hover:bg-ink/90">
-            {uploading ? "Uploading..." : "+ Upload photos"}
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              disabled={uploading}
-              onChange={(e) => onUploadFiles(e.target.files)}
-              className="sr-only"
-            />
-          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            {images[0]?.url && (
+              <button
+                type="button"
+                disabled={aiLoading}
+                onClick={() => onDescribePhoto(images[0].url)}
+                className="min-h-11 cursor-pointer rounded-xl bg-glow px-4 text-xs font-bold text-obsidian transition hover:bg-glow-deep disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {aiLoading ? "Analysing..." : "✨ Describe photo with AI"}
+              </button>
+            )}
+            <label className="inline-flex min-h-11 cursor-pointer items-center rounded-xl bg-ink px-4 text-xs font-semibold text-mist transition hover:bg-ink/90">
+              {uploading ? "Uploading..." : "+ Upload photos"}
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                disabled={uploading}
+                onChange={(e) => onUploadFiles(e.target.files)}
+                className="sr-only"
+              />
+            </label>
+          </div>
         </div>
 
         {images.length > 0 && (
@@ -406,13 +468,23 @@ export default function SellerProductForm({
                       </option>
                     ))}
                   </select>
-                  <button
-                    type="button"
-                    onClick={() => setImages((prev) => prev.filter((_, idx) => idx !== i))}
-                    className="cursor-pointer text-xs font-semibold text-red-700 underline"
-                  >
-                    Remove
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      disabled={aiLoading}
+                      onClick={() => onDescribePhoto(img.url)}
+                      className="cursor-pointer text-xs font-semibold text-ink underline disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      ✨ Describe
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setImages((prev) => prev.filter((_, idx) => idx !== i))}
+                      className="cursor-pointer text-xs font-semibold text-red-700 underline"
+                    >
+                      Remove
+                    </button>
+                  </div>
                 </div>
               </li>
             ))}
