@@ -1,13 +1,14 @@
 @import "tailwindcss";
 
-/* Hearth palette: midnight ink, moon mist, one warm glow accent. */
+/* Hearth palette: obsidian, deep forest, sage stone, warm linen, champagne sand. */
 @theme inline {
-  --color-ink: #0e1626;
-  --color-mist: #eef1f6;
-  --color-glow: #f4b63f;
-  --color-glow-deep: #e0a02a;
-  --color-fog: #d5dce6;
-  --color-muted: #566174;
+  --color-ink: #2a3723;
+  --color-obsidian: #0c0a08;
+  --color-mist: #e8e5dd;
+  --color-glow: #dcbc98;
+  --color-glow-deep: #caa47a;
+  --color-fog: #b9bba8;
+  --color-muted: #525849;
   --font-display: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
   --font-sans: var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
 }
@@ -37,8 +38,51 @@
 
 body {
   background: var(--color-mist);
-  color: var(--color-ink);
+  color: var(--color-obsidian);
   overflow-x: clip;
+}
+
+@keyframes floatSlow {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(18px, -22px, 0) scale(1.04);
+  }
+}
+
+@keyframes floatReverse {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(-20px, 18px, 0) scale(1.03);
+  }
+}
+
+@keyframes fadeSlideUp {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.animate-float-slow {
+  animation: floatSlow 16s ease-in-out infinite;
+}
+
+.animate-float-reverse {
+  animation: floatReverse 20s ease-in-out infinite;
+}
+
+.animate-fade-up {
+  animation: fadeSlideUp 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 :focus-visible {

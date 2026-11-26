@@ -40,12 +40,12 @@ async function CartContent() {
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+    <div className="animate-fade-up grid gap-6 lg:grid-cols-[1fr_320px]">
       <div className="min-w-0">
         <h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">Your basket</h1>
         <ul className="mt-4 grid gap-4">
           {lines.map((l) => (
-            <li key={l.id} className="flex flex-col gap-4 rounded-2xl bg-white p-4 ring-1 ring-fog sm:flex-row">
+            <li key={l.id} className="flex flex-col gap-4 rounded-2xl bg-white/95 p-4 shadow-xs ring-1 ring-fog sm:flex-row">
               <div className="aspect-[4/3] w-full shrink-0 overflow-hidden rounded-xl sm:w-36">
                 {l.imageUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element

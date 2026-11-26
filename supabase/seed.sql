@@ -1,70 +1,36 @@
 -- Run in Supabase -> SQL Editor.
--- Creates the pre-confirmed demo seller account (demo@hearth.com / demo1234) with no confirmation email,
--- and adds the Prague Divan Bed exactly as listed in the test (prices as numbers).
+-- Creates pre-confirmed demo accounts (password: demo1234) with no confirmation email:
+--   Seller: demo@hearth.com
+--   Buyer:  buyer@hearth.com
+--   Admin:  admin@hearth.com
+-- And adds the Prague Divan Bed exactly as listed in the test (prices as numbers).
 do $$
-declare s uuid; furn uuid; cat uuid; p uuid; g uuid;
+declare s uuid; b uuid; a uuid; furn uuid; cat uuid; p uuid; g uuid;
 begin
+  -- 1. Demo Seller (demo@hearth.com)
   select id into s from auth.users where email = 'demo@hearth.com' limit 1;
-
   if s is null then
     s := gen_random_uuid();
     insert into auth.users (
-      instance_id,
-      id,
-      aud,
-      role,
-      email,
-      encrypted_password,
-      email_confirmed_at,
-      raw_app_meta_data,
-      raw_user_meta_data,
-      created_at,
-      updated_at,
-      confirmation_token,
-      recovery_token,
-      email_change_token_new,
-      email_change
+      instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
+      raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
+      confirmation_token, recovery_token, email_change_token_new, email_change
     ) values (
-      '00000000-0000-0000-0000-000000000000',
-      s,
-      'authenticated',
-      'authenticated',
-      'demo@hearth.com',
-      crypt('demo1234', gen_salt('bf')),
-      now(),
+      '00000000-0000-0000-0000-000000000000', s, 'authenticated', 'authenticated',
+      'demo@hearth.com', crypt('demo1234', gen_salt('bf')), now(),
       '{"provider":"email","providers":["email"]}'::jsonb,
       '{"full_name":"Demo Seller","shop_name":"Hearth","role":"seller"}'::jsonb,
-      now(),
-      now(),
-      '',
-      '',
-      '',
-      ''
+      now(), now(), '', '', '', ''
     );
-
     insert into auth.identities (
-      id,
-      user_id,
-      identity_data,
-      provider,
-      provider_id,
-      last_sign_in_at,
-      created_at,
-      updated_at
+      id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at
     ) values (
-      gen_random_uuid(),
-      s,
+      gen_random_uuid(), s,
       jsonb_build_object('sub', s::text, 'email', 'demo@hearth.com', 'email_verified', true, 'phone_verified', false),
-      'email',
-      s::text,
-      now(),
-      now(),
-      now()
+      'email', s::text, now(), now(), now()
     );
   else
-    update auth.users
-    set email_confirmed_at = coalesce(email_confirmed_at, now())
-    where id = s;
+    update auth.users set email_confirmed_at = coalesce(email_confirmed_at, now()) where id = s;
   end if;
 
   insert into public.profiles (id, full_name, shop_name, role)
@@ -73,6 +39,70 @@ begin
     set full_name = coalesce(nullif(public.profiles.full_name, ''), excluded.full_name),
         shop_name = coalesce(nullif(public.profiles.shop_name, ''), excluded.shop_name),
         role = 'seller';
+
+  -- 2. Demo Buyer (buyer@hearth.com)
+  select id into b from auth.users where email = 'buyer@hearth.com' limit 1;
+  if b is null then
+    b := gen_random_uuid();
+    insert into auth.users (
+      instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
+      raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
+      confirmation_token, recovery_token, email_change_token_new, email_change
+    ) values (
+      '00000000-0000-0000-0000-000000000000', b, 'authenticated', 'authenticated',
+      'buyer@hearth.com', crypt('demo1234', gen_salt('bf')), now(),
+      '{"provider":"email","providers":["email"]}'::jsonb,
+      '{"full_name":"Demo Buyer","shop_name":"","role":"buyer"}'::jsonb,
+      now(), now(), '', '', '', ''
+    );
+    insert into auth.identities (
+      id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at
+    ) values (
+      gen_random_uuid(), b,
+      jsonb_build_object('sub', b::text, 'email', 'buyer@hearth.com', 'email_verified', true, 'phone_verified', false),
+      'email', b::text, now(), now(), now()
+    );
+  else
+    update auth.users set email_confirmed_at = coalesce(email_confirmed_at, now()) where id = b;
+  end if;
+
+  insert into public.profiles (id, full_name, shop_name, role)
+  values (b, 'Demo Buyer', '', 'buyer')
+  on conflict (id) do update
+    set full_name = coalesce(nullif(public.profiles.full_name, ''), excluded.full_name),
+        role = 'buyer';
+
+  -- 3. Demo Admin (admin@hearth.com)
+  select id into a from auth.users where email = 'admin@hearth.com' limit 1;
+  if a is null then
+    a := gen_random_uuid();
+    insert into auth.users (
+      instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
+      raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
+      confirmation_token, recovery_token, email_change_token_new, email_change
+    ) values (
+      '00000000-0000-0000-0000-000000000000', a, 'authenticated', 'authenticated',
+      'admin@hearth.com', crypt('demo1234', gen_salt('bf')), now(),
+      '{"provider":"email","providers":["email"]}'::jsonb,
+      '{"full_name":"Hearth Admin","shop_name":"","role":"buyer"}'::jsonb,
+      now(), now(), '', '', '', ''
+    );
+    insert into auth.identities (
+      id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at
+    ) values (
+      gen_random_uuid(), a,
+      jsonb_build_object('sub', a::text, 'email', 'admin@hearth.com', 'email_verified', true, 'phone_verified', false),
+      'email', a::text, now(), now(), now()
+    );
+  else
+    update auth.users set email_confirmed_at = coalesce(email_confirmed_at, now()) where id = a;
+  end if;
+
+  insert into public.profiles (id, full_name, shop_name, role)
+  values (a, 'Hearth Admin', '', 'admin')
+  on conflict (id) do update
+    set full_name = coalesce(nullif(public.profiles.full_name, ''), excluded.full_name),
+        role = 'admin';
 
   insert into public.categories (name, slug) values ('Furniture', 'furniture') on conflict (slug) do nothing;
   select id into furn from public.categories where slug = 'furniture';
