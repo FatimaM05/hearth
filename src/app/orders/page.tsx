@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
+import OrderStatusNotice from "@/components/OrderStatusNotice";
 import { gbp } from "@/lib/pricing";
 import { createClient } from "@/lib/supabase/server";
 
@@ -48,6 +49,9 @@ async function OrdersContent() {
     .order("created_at", { ascending: false });
 
   const orders = (data ?? []) as unknown as OrderRow[];
+  const allItems = orders.flatMap((o) =>
+    o.order_items.map((item) => ({ id: item.id, title: item.title, status: item.status }))
+  );
 
   return (
     <div className="animate-fade-up space-y-6">
@@ -60,6 +64,8 @@ async function OrdersContent() {
           Browse beds
         </Link>
       </div>
+
+      <OrderStatusNotice items={allItems} />
 
       {orders.length === 0 ? (
         <div className="rounded-2xl bg-white p-8 text-center shadow-xs ring-1 ring-fog">
