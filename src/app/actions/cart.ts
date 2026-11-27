@@ -65,6 +65,8 @@ export async function addToCart(input: {
     if (error) return { ok: false, error: error.message };
   }
   revalidatePath("/", "layout");
+  revalidatePath("/cart");
+  revalidatePath("/checkout");
   return { ok: true };
 }
 
@@ -73,10 +75,14 @@ export async function updateQty(itemId: string, qty: number): Promise<void> {
   if (qty < 1) await supabase.from("cart_items").delete().eq("id", itemId);
   else await supabase.from("cart_items").update({ quantity: Math.min(qty, 10) }).eq("id", itemId);
   revalidatePath("/", "layout");
+  revalidatePath("/cart");
+  revalidatePath("/checkout");
 }
 
 export async function removeItem(itemId: string): Promise<void> {
   const supabase = await createClient();
   await supabase.from("cart_items").delete().eq("id", itemId);
   revalidatePath("/", "layout");
+  revalidatePath("/cart");
+  revalidatePath("/checkout");
 }
